@@ -1,0 +1,30 @@
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+.astro/
+
+# Local tooling
+.tools/
+.vercel/
+
+# Test output
+coverage/
+test-results/
+playwright-report/
+blob-report/
+*.trace.zip
+
+# Local environment
+.env
+.env.*
+!.env.example
+
+# Logs and OS/editor caches
+*.log
+.DS_Store
+Thumbs.db
+
+# Temporary research and local artifacts
+docs/files/
