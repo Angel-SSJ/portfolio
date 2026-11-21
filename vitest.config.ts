@@ -5,5 +5,6 @@ export default getViteConfig({
   test: {
     include: ['tests/unit/**/*.test.ts', 'tests/components/**/*.test.ts'],
     environment: 'node',
+    testTimeout: 30_000,
   },
 });

@@ -53,3 +53,21 @@ behavior is verified by the Playwright suite; rendered-string tests only check m
 
 Component contracts use Astro's `experimental_AstroContainer`, which is pinned with Astro.
 Upgrades must rerun the render tests; these tests do not replace client/browser verification.
+
+## Commit and hook policy
+
+`pnpm hooks:install` installs the Lefthook hooks and patches the generated `pre-commit` wrapper
+with `--no-stage-fixed`. Lefthook 2.2.2 otherwise saves, stashes, reverts and restores partially
+staged files for every pre-commit hook. This project never enables `stage_fixed`, fixers or
+`git add` in a hook, so that guard is disabled explicitly. Do not replace `hooks:install` with a
+raw `lefthook install`.
+
+Pre-commit checks the current working-tree bytes of staged paths with their owning tools. An
+unstaged invalid edit in the same file can therefore block a commit, but it is never staged.
+`commit-msg` validates the actual message file with commitlint; `pre-push` validates every pushed
+commit range and runs lightweight type and unit gates. `LEFTHOOK=0` bypasses hooks locally and is
+only for deliberate diagnosis; CI repeats the same checks in Task 7.
+
+Future integration merges stay local: create the merge commit locally with the exact owner
+identity and a conventional message, validate the full `base..HEAD` range, and never push a merge
+created by a hosting-provider button.

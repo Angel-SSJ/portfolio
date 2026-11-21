@@ -1,0 +1,21 @@
+no_auto_install: true
+
+pre-commit:
+  commands:
+    staged:
+      run: node scripts/hooks/check-staged.mjs {staged_files}
+
+commit-msg:
+  commands:
+    message:
+      run: node scripts/hooks/check-commit-msg.mjs {1}
+
+pre-push:
+  commands:
+    commits:
+      use_stdin: true
+      run: node scripts/hooks/pre-push.mjs
+    types:
+      run: pnpm typecheck
+    unit:
+      run: pnpm test:unit
