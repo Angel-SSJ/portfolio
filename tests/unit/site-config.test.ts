@@ -14,7 +14,8 @@ describe('SiteConfigSchema', () => {
 
   it('rejects an empty name', () => {
     expect(
-      SiteConfigSchema.safeParse({ name: '', description: 'x', lang: 'es' }).success,
+      SiteConfigSchema.safeParse({ name: '', description: 'x', lang: 'es' })
+        .success,
     ).toBe(false);
   });
 
