@@ -1,5 +1,8 @@
 ---
+import { ThemeInitScript } from '@starwind-ui/astro/theme';
+import '@/styles/starwind.css';
 import { siteConfig } from '@/config/site';
+import { THEME_OPTIONS } from '@/config/theme';
 
 interface Props {
   title?: string;
@@ -16,6 +19,7 @@ const { title = siteConfig.name, description = siteConfig.description } = Astro.
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>{title}</title>
     <meta name="description" content={description} />
+    <ThemeInitScript {...THEME_OPTIONS} />
   </head>
   <body>
     <slot />

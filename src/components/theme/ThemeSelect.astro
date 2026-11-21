@@ -1,0 +1,49 @@
+---
+import { THEME_VALUES } from '@/config/theme';
+---
+
+<div class="theme-select">
+  <label for="theme-select">Tema</label>
+  <select id="theme-select" name="theme">
+    {THEME_VALUES.map((value) => (
+      <option value={value}>{value}</option>
+    ))}
+  </select>
+</div>
+
+<script>
+  import { initThemeController } from '@starwind-ui/astro/theme';
+  import { THEME_OPTIONS } from '@/config/theme';
+
+  const select = document.querySelector<HTMLSelectElement>('#theme-select');
+
+  if (select) {
+    const controller = initThemeController(document, { ...THEME_OPTIONS });
+
+    select.value = controller.getTheme();
+
+    controller.subscribe('themeChange', (details) => {
+      select.value = details.theme;
+    });
+
+    select.addEventListener('change', () => {
+      controller.setTheme(select.value as 'light' | 'dark' | 'system');
+    });
+  }
+</script>
+
+<style>
+  .theme-select {
+    display: flex;
+    gap: 0.5rem;
+    align-items: center;
+  }
+
+  select {
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    padding: 0.25rem 0.5rem;
+    background: var(--background);
+    color: var(--foreground);
+  }
+</style>

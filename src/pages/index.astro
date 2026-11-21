@@ -1,13 +1,36 @@
 ---
+import { Button } from '@/components/starwind/button';
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from '@/components/starwind/card';
+import ThemeSelect from '@/components/theme/ThemeSelect.astro';
 import BaseLayout from '@/layouts/BaseLayout.astro';
 ---
 
 <BaseLayout>
+  <header>
+    <a href="/">Inicio</a>
+    <ThemeSelect />
+  </header>
   <main>
     <h1>Angel Ramirez</h1>
     <p>Portafolio personal.</p>
-    <p>
-      <a href="/">Inicio</a>
-    </p>
+    <Card>
+      <CardHeader>
+        <CardTitle>Fundación</CardTitle>
+        <CardDescription>Base estática del portafolio.</CardDescription>
+      </CardHeader>
+      <CardContent>
+        <p>Esta página ejercita los componentes y tokens del sistema.</p>
+        <Button type="button">Ver más</Button>
+      </CardContent>
+    </Card>
   </main>
+  <footer>
+    <p>Portafolio personal.</p>
+  </footer>
 </BaseLayout>
