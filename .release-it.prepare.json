@@ -1,0 +1,33 @@
+{
+  "git": {
+    "requireCleanWorkingDir": true,
+    "requireBranch": false,
+    "requireUpstream": false,
+    "requireCommits": false,
+    "commit": false,
+    "tag": false,
+    "push": false
+  },
+  "npm": {
+    "publish": false,
+    "skipChecks": true
+  },
+  "github": {
+    "release": false
+  },
+  "gitlab": {
+    "release": false
+  },
+  "plugins": {
+    "@release-it/conventional-changelog": {
+      "preset": "conventionalcommits",
+      "infile": "CHANGELOG.md",
+      "header": "# Changelog",
+      "strictSemVer": true,
+      "tagPrefix": "v"
+    }
+  },
+  "hooks": {
+    "after:bump": "pnpm install --lockfile-only"
+  }
+}

@@ -71,3 +71,9 @@ only for deliberate diagnosis; CI repeats the same checks in Task 7.
 Future integration merges stay local: create the merge commit locally with the exact owner
 identity and a conventional message, validate the full `base..HEAD` range, and never push a merge
 created by a hosting-provider button.
+
+## Release boundary
+
+Releases are split into an owner-reviewed preparation phase and an owner-authorized tag-only
+finalization phase. See `docs/maintenance/releases.md` for the branch, identity, CI, tag and retry
+rules. No setup task creates a release tag or publishes anything.

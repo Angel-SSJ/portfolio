@@ -1,0 +1,23 @@
+{
+  "increment": false,
+  "git": {
+    "requireCleanWorkingDir": true,
+    "requireBranch": false,
+    "requireUpstream": false,
+    "requireCommits": false,
+    "commit": false,
+    "tag": true,
+    "tagName": "v${version}",
+    "tagAnnotation": "Release ${version}",
+    "push": false
+  },
+  "npm": false,
+  "github": {
+    "release": false
+  },
+  "gitlab": {
+    "release": false
+  },
+  "plugins": {},
+  "hooks": {}
+}
