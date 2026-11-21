@@ -218,20 +218,38 @@ test.describe('theme state', () => {
       .toBe('rgb(4, 5, 6)');
   });
 
-  test('reduced-motion emulation shortens transitions', async ({ page }) => {
-    await page.emulateMedia({ reducedMotion: 'reduce' });
+  test('reduced-motion emulation overrides real transitions', async ({
+    page,
+  }) => {
+    await page.emulateMedia({ reducedMotion: 'no-preference' });
     await page.goto('/');
+    await page.addStyleTag({
+      content: '@layer probe { .motion-probe { transition-duration: 1s; } }',
+    });
+    await page.evaluate(() => {
+      const element = document.createElement('div');
+      element.className = 'motion-probe';
+      document.body.append(element);
+    });
 
-    const durations = await page.evaluate(() =>
-      ['body', '#theme-select'].map(
-        (selector) =>
-          getComputedStyle(document.querySelector(selector) as Element)
-            .transitionDuration,
-      ),
-    );
+    const duration = async () => {
+      const value = await page
+        .locator('.motion-probe')
+        .evaluate((element) => getComputedStyle(element).transitionDuration);
+      return value.endsWith('ms')
+        ? Number.parseFloat(value) / 1000
+        : Number.parseFloat(value);
+    };
 
-    for (const duration of durations) {
-      expect(Number.parseFloat(duration)).toBeLessThanOrEqual(0.001);
-    }
+    await expect.poll(duration).toBe(1);
+
+    await page.emulateMedia({ reducedMotion: 'reduce' });
+
+    await expect
+      .poll(async () => {
+        const seconds = await duration();
+        return seconds <= 0.00002;
+      })
+      .toBe(true);
   });
 });

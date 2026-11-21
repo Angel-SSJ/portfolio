@@ -185,18 +185,6 @@ function ciConfigured(cwd) {
 }
 
 /**
- * @param {string} cwd
- * @returns {boolean}
- */
-function secretsConfigured(cwd) {
-  return (
-    vercelLinked(cwd) &&
-    typeof process.env.VERCEL_TOKEN === 'string' &&
-    process.env.VERCEL_TOKEN.length > 0
-  );
-}
-
-/**
  * @param {{ cwd?: string, externalRequested?: boolean }} [input]
  * @returns {DoctorFacts}
  */
@@ -225,7 +213,7 @@ export function collectDoctorFacts({
     hooksInstalled: hooksInstalled(cwd),
     vercelLinked: vercelLinked(cwd),
     ciConfigured: ciConfigured(cwd),
-    secretsConfigured: secretsConfigured(cwd),
+    secretsConfigured: false,
     externalRequested,
   };
 }

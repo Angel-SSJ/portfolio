@@ -18,6 +18,7 @@ type FixtureOptions = {
   package?: (pkg: PackageJson) => void;
   files?: Record<string, string>;
   tracked?: string[];
+  git?: boolean;
 };
 
 const root = process.cwd();
@@ -52,11 +53,15 @@ const fixtures: string[] = [];
 function createFixture(options: FixtureOptions = {}) {
   const cwd = fs.mkdtempSync(path.join(os.tmpdir(), 'portfolio-repo-'));
   fixtures.push(cwd);
-  execFileSync('git', ['init', '--quiet'], { cwd });
-  execFileSync('git', ['config', 'core.autocrlf', 'false'], {
-    cwd,
-    stdio: 'ignore',
-  });
+  const initializeGit = options.git ?? true;
+
+  if (initializeGit) {
+    execFileSync('git', ['init', '--quiet'], { cwd });
+    execFileSync('git', ['config', 'core.autocrlf', 'false'], {
+      cwd,
+      stdio: 'ignore',
+    });
+  }
 
   for (const [file, content] of Object.entries(sourceFiles)) {
     fs.writeFileSync(path.join(cwd, file), content, 'utf8');
@@ -80,7 +85,9 @@ function createFixture(options: FixtureOptions = {}) {
     fs.writeFileSync(path.join(cwd, file), 'tracked\n', 'utf8');
   }
 
-  execFileSync('git', ['add', '--all'], { cwd });
+  if (initializeGit) {
+    execFileSync('git', ['add', '--all'], { cwd });
+  }
   return cwd;
 }
 
@@ -145,6 +152,16 @@ describe('repository invariants', () => {
     expect(result.errors).toContain('forbidden-tracked-artifact');
   });
 
+  it('accepts preserved Starwind utility paths', async () => {
+    const cwd = createFixture({
+      tracked: ['src/lib/utils/classes.ts'],
+    });
+
+    const result = await inspectRepository({ cwd });
+
+    expect(result.errors).not.toContain('unexpected-production-path');
+  });
+
   it('rejects server routes in a static production path', async () => {
     const cwd = createFixture({
       tracked: ['src/pages/api/status.ts'],
@@ -153,5 +170,13 @@ describe('repository invariants', () => {
     const result = await inspectRepository({ cwd });
 
     expect(result.errors).toContain('static-production-only');
+  });
+
+  it('reports failed Git inspection instead of skipping tracked-file checks', async () => {
+    const cwd = createFixture({ git: false });
+
+    const result = await inspectRepository({ cwd });
+
+    expect(result.errors).toContain('git-inspection-failed');
   });
 });

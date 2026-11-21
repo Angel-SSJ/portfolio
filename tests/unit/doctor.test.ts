@@ -1,6 +1,12 @@
 import { spawnSync } from 'node:child_process';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { evaluateDoctor } from '../../scripts/lib/doctor.mjs';
+import {
+  collectDoctorFacts,
+  evaluateDoctor,
+} from '../../scripts/lib/doctor.mjs';
 
 type DoctorFacts = {
   runtimeMatches: boolean;
@@ -65,12 +71,36 @@ describe('doctor facts', () => {
     expect(failed.errors).toContain('vercel-not-linked');
   });
 
+  it('does not claim deployment secrets are configured from a local token', () => {
+    const cwd = fs.mkdtempSync(path.join(os.tmpdir(), 'portfolio-doctor-'));
+    const previousToken = process.env.VERCEL_TOKEN;
+
+    try {
+      fs.mkdirSync(path.join(cwd, '.vercel'));
+      fs.writeFileSync(
+        path.join(cwd, '.vercel/project.json'),
+        `${JSON.stringify({ orgId: 'org', projectId: 'project' })}\n`,
+        'utf8',
+      );
+      process.env.VERCEL_TOKEN = 'diagnostic-secret-do-not-print';
+
+      expect(collectDoctorFacts({ cwd }).secretsConfigured).toBe(false);
+    } finally {
+      if (previousToken === undefined) {
+        delete process.env.VERCEL_TOKEN;
+      } else {
+        process.env.VERCEL_TOKEN = previousToken;
+      }
+      fs.rmSync(cwd, { recursive: true, force: true });
+    }
+  });
+
   it('never prints a supplied secret in CLI output', () => {
     const secret = 'diagnostic-secret-do-not-print';
     const result = spawnSync(process.execPath, ['scripts/doctor.mjs'], {
       cwd: process.cwd(),
       encoding: 'utf8',
-      env: { ...process.env, PORTFOLIO_TEST_SECRET: secret },
+      env: { ...process.env, VERCEL_TOKEN: secret },
     });
     const output = `${result.stdout ?? ''}${result.stderr ?? ''}`;
 

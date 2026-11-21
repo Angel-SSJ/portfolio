@@ -67,17 +67,13 @@ function readJson(cwd, file) {
  * @returns {string[]}
  */
 function trackedFiles(cwd) {
-  try {
-    return execFileSync('git', ['ls-files', '-z'], {
-      cwd,
-      encoding: 'utf8',
-      stdio: ['ignore', 'pipe', 'ignore'],
-    })
-      .split('\0')
-      .filter(Boolean);
-  } catch {
-    return [];
-  }
+  return execFileSync('git', ['ls-files', '-z'], {
+    cwd,
+    encoding: 'utf8',
+    stdio: ['ignore', 'pipe', 'ignore'],
+  })
+    .split('\0')
+    .filter(Boolean);
 }
 
 /**
@@ -210,9 +206,14 @@ function inspectProductionPaths(cwd, files, errors) {
     productionFiles.some((file) => {
       const relative = file.slice('src/'.length);
       const topLevel = relative.split('/')[0] ?? '';
-      return !['components', 'config', 'layouts', 'pages', 'styles'].includes(
-        topLevel,
-      );
+      return ![
+        'components',
+        'config',
+        'layouts',
+        'lib',
+        'pages',
+        'styles',
+      ].includes(topLevel);
     })
   ) {
     errors.push('unexpected-production-path');
@@ -255,7 +256,17 @@ export async function inspectRepository({ cwd = process.cwd() } = {}) {
   }
 
   inspectTestBoundaries(cwd, errors);
-  inspectProductionPaths(cwd, trackedFiles(cwd), errors);
+
+  /** @type {string[]} */
+  let files = [];
+
+  try {
+    files = trackedFiles(cwd);
+  } catch {
+    errors.push('git-inspection-failed');
+  }
+
+  inspectProductionPaths(cwd, files, errors);
 
   return {
     errors: [...new Set(errors)],
