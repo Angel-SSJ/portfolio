@@ -16,11 +16,20 @@ function track<T extends ReleaseFixture>(fixture: T): T {
   return fixture;
 }
 
-function servicesFor(fixture: ReleaseFixture, sha: string) {
+function servicesFor(
+  fixture: ReleaseFixture,
+  sha: string,
+  healthCalls: { count: number } = { count: 0 },
+) {
   return {
     ...createReleaseServices(fixture.cwd),
+    healthCalls,
     async ci() {
       return { status: 'success', sha };
+    },
+    async health() {
+      healthCalls.count += 1;
+      return 0;
     },
   };
 }
@@ -99,6 +108,22 @@ describe('release phase boundaries', () => {
         'refs/tags/v0.1.0',
       ]),
     ).toBe('Angel Ramirez|<angelgabriel.16ra@gmail.com>');
+  });
+
+  it('runs the health aggregate exactly once before finalization', async () => {
+    const fixture = track(createReleaseFixture('0.1.0'));
+    const before = fixture.snapshot();
+    const healthCalls = { count: 0 };
+    const services = servicesFor(fixture, before.head, healthCalls);
+
+    const result = await finalizeRelease({
+      cwd: fixture.cwd,
+      tagName: 'v0.1.0',
+      services,
+    });
+
+    expect(result.errors).toEqual([]);
+    expect(healthCalls.count).toBe(1);
   });
 
   it('does not create a duplicate tag on a second finalization', async () => {

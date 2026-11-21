@@ -1,5 +1,6 @@
 import { execFileSync } from 'node:child_process';
 import path from 'node:path';
+import { checkRelease } from './check-release.mjs';
 import {
   createReleaseServices,
   git,
@@ -10,11 +11,12 @@ import { verifyRelease } from './verify-release.mjs';
 const ROOT = process.env.PORTFOLIO_ROOT ?? process.cwd();
 
 /**
- * @param {{ cwd?: string, tagName?: string | null, services?: ReturnType<typeof createReleaseServices>, dryRun?: boolean }} [input]
+ * @param {{ cwd?: string, tagName?: string | null, services?: ReturnType<typeof createReleaseServices> & { health?: () => number | Promise<number> }, dryRun?: boolean }} [input]
  * @returns {Promise<{ errors: string[] }>}
  */
 export async function finalizeRelease(input = {}) {
   const cwd = input.cwd ?? process.cwd();
+  /** @type {ReturnType<typeof createReleaseServices> & { health?: () => number | Promise<number> }} */
   const services = input.services ?? createReleaseServices(cwd);
   const tagName = input.tagName ?? `v${readPackageVersion(cwd)}`;
   const dryRun = input.dryRun ?? false;
@@ -24,14 +26,20 @@ export async function finalizeRelease(input = {}) {
     { allowFailure: true },
   );
 
-  if (remoteTag) {
-    return verifyRelease({ cwd, mode: 'tag', tagName, services });
+  const checked = await checkRelease({
+    cwd,
+    mode: remoteTag ? 'tag' : 'local',
+    tagName,
+    services,
+    health: services.health,
+  });
+
+  if (checked.errors.length > 0) {
+    return checked;
   }
 
-  const verified = await verifyRelease({ cwd, mode: 'local', services });
-
-  if (verified.errors.length > 0) {
-    return verified;
+  if (remoteTag) {
+    return checked;
   }
 
   const version = readPackageVersion(cwd);
