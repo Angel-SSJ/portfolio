@@ -27,6 +27,16 @@ The approved plan and spec under `docs/superpowers/` are archival records and ar
 from Biome formatting so their text stays verbatim. `README.md` is not created or edited in
 this phase.
 
+## Workflow ownership
+
+`.github/workflows/ci.yml` is the only branch check and its single `quality` job is the required
+status. It checks the exact pushed head with no persisted credentials, installs the pinned
+runtime/toolchain and browsers, runs `pnpm health`, then validates the correct `check:commits`
+range. `.github/workflows/deploy.yml` runs only for strict stable `v*` tags, resolves the
+annotated tag to its exact commit, gates deployment behind the promotion policy, and records a
+GitHub Release only after a successful promotion. `vercel.json` disables Vercel Git deployments;
+there is no SPA rewrite and no SSR adapter.
+
 ## Editable design tokens
 
 All appearance changes belong in the clearly marked `EDITABLE DESIGN TOKENS` area of

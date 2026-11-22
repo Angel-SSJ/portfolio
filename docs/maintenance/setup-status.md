@@ -28,12 +28,13 @@ updated as the foundation is built; do not treat planned items as verified.
 
 ## Planned or pending state
 
-- Formatting/linting tooling: complete (Task 2); approved plan/spec docs under
-  `docs/superpowers/` are intentionally excluded from Biome to keep them verbatim.
-- Starwind tokens and theme control: complete locally (Task 3). Theme prepaint and
-  persistence behavior still needs browser verification in Task 6; it is not claimed here.
-- Git hooks and commit policy: pending Task 4.
-- Owner-controlled release tooling: pending Task 5.
-- Browser tests and the health command: pending Task 6.
-- GitHub Actions CI and deployment workflow: pending Task 7.
-- GitHub branch protection and Vercel project linking: pending Task 8 (external).
+- Formatting/linting tooling, Starwind tokens/theme, hooks/commit policy, owner-controlled
+  release tooling, browser tests and `pnpm health`: complete locally (Tasks 2–6).
+- Branch CI with the required `quality` job and tag-only deployment workflow: complete
+  locally (Task 7). `vercel.json` disables Vercel Git deployments.
+- Workflow validation uses pinned actionlint 2.0.6 through `pnpm check:workflows`; Vercel CLI
+  66.6.0 is pinned but no deployment command has been executed.
+- Local checks validate guards and configuration only. No real GitHub Actions run, release
+  tag, GitHub Release or production promotion is claimed.
+- GitHub branch protection, Vercel project linking, CI variables/secrets and final external
+  verification: pending Task 8 (requires owner authorization).

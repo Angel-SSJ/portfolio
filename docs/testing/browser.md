@@ -30,3 +30,12 @@ review.
 `BASE_URL` when supplied, and then runs the same local `health` gate. `pnpm release` calls this
 aggregate once before any tag mutation. External publication readiness remains pending until the
 owner authorizes Task 8.
+
+Browser projects run with one worker both locally and in CI. Higher local concurrency caused
+WebKit and mobile-Chromium timeouts under resource contention; serial execution keeps the health
+gate deterministic.
+
+The tag workflow sets `PORTFOLIO_STAGED_SMOKE=1` when testing the staged production deployment.
+That mode disables traces, screenshots and video so secret-bearing browser artifacts are not
+created. An optional `VERCEL_AUTOMATION_BYPASS_SECRET` adds the Vercel automation header to
+Playwright and route smoke requests; it is never printed or uploaded.
