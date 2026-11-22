@@ -10,6 +10,12 @@ import path from 'node:path';
  * @property {Record<string, string>} [scripts]
  * @property {Record<string, string>} [dependencies]
  * @property {Record<string, string>} [devDependencies]
+ * @property {{ deploymentEnabled?: unknown }} [git]
+ * @property {unknown} [framework]
+ * @property {unknown} [installCommand]
+ * @property {unknown} [buildCommand]
+ * @property {unknown} [outputDirectory]
+ * @property {Record<string, unknown>[]} [rewrites]
  */
 
 const FORBIDDEN_TRACKED = [
@@ -34,6 +40,8 @@ const EXACT_DEPENDENCIES = [
   '@commitlint/cli',
   'release-it',
   '@release-it/conventional-changelog',
+  'actionlint',
+  'vercel',
 ];
 
 /**
@@ -106,6 +114,7 @@ function hasScriptOwnership(pkg, errors) {
     health: ['node'],
     verify: ['node'],
     'release:check': ['node'],
+    'check:workflows': ['node'],
   };
 
   for (const [name, needles] of Object.entries(expected)) {
@@ -237,6 +246,111 @@ function inspectProductionPaths(cwd, files, errors) {
 }
 
 /**
+ * @param {string} cwd
+ * @param {string[]} errors
+ */
+function inspectDeploymentConfiguration(cwd, errors) {
+  const vercelConfig = readJson(cwd, 'vercel.json');
+
+  if (!vercelConfig) {
+    errors.push('vercel-config-missing');
+  } else {
+    if (vercelConfig.git?.deploymentEnabled !== false) {
+      errors.push('vercel-git-deploy-enabled');
+    }
+
+    if (
+      vercelConfig.framework !== 'astro' ||
+      vercelConfig.installCommand !== 'pnpm install --frozen-lockfile' ||
+      vercelConfig.buildCommand !== 'pnpm build' ||
+      vercelConfig.outputDirectory !== 'dist'
+    ) {
+      errors.push('vercel-build-settings-invalid');
+    }
+
+    if (
+      Array.isArray(vercelConfig.rewrites) &&
+      vercelConfig.rewrites.some(
+        (rewrite) =>
+          rewrite?.source === '/(.*)' ||
+          rewrite?.source === '/**' ||
+          rewrite?.destination === '/index.html',
+      )
+    ) {
+      errors.push('spa-rewrite-forbidden');
+    }
+  }
+
+  /** @type {string[]} */
+  let workflowFiles = [];
+
+  try {
+    workflowFiles = fs
+      .readdirSync(path.join(cwd, '.github/workflows'))
+      .filter((file) => file.endsWith('.yml') || file.endsWith('.yaml'));
+  } catch {
+    errors.push('workflow-config-missing');
+  }
+
+  if (!workflowFiles.includes('deploy.yml') && workflowFiles.length > 0) {
+    errors.push('release-workflow-missing');
+  }
+
+  let releaseTriggers = 0;
+
+  for (const file of workflowFiles) {
+    const contents = readFile(cwd, path.join('.github/workflows', file));
+
+    if (!contents) {
+      errors.push('workflow-config-invalid');
+      continue;
+    }
+
+    const branchLines = contents.match(/branches\s*:\s*\[[^\]]*\]/g) ?? [];
+    const tagLines = contents.match(/tags\s*:\s*\[[^\]]*\]/g) ?? [];
+    const hasMainPush =
+      branchLines.some((line) => /\bmain\b/.test(line)) ||
+      /^\s*-\s*['"]?main['"]?\s*$/m.test(contents);
+    const hasTagTrigger =
+      tagLines.some((line) => line.includes('v*')) ||
+      /^\s*-\s*['"]?v\*['"]?\s*$/m.test(contents);
+    const hasReleaseEvent = /^\s*release\s*:/m.test(contents);
+    const usesVercel =
+      contents.includes('VERCEL_TOKEN') ||
+      /vercel\s+(?:deploy|promote|build|pull)/.test(contents);
+
+    if (hasMainPush && usesVercel) {
+      errors.push('main-deployment-trigger');
+    }
+
+    if (hasTagTrigger || hasReleaseEvent) {
+      releaseTriggers += 1;
+
+      if (file !== 'deploy.yml') {
+        errors.push('duplicate-release-trigger');
+      }
+    }
+  }
+
+  if (releaseTriggers > 1) {
+    errors.push('duplicate-release-trigger');
+  }
+
+  const deployWorkflow = readFile(
+    cwd,
+    path.join('.github/workflows', 'deploy.yml'),
+  );
+
+  if (
+    deployWorkflow &&
+    !/tags\s*:\s*\[[^\]]*\bv\*/.test(deployWorkflow) &&
+    !/^\s*-\s*['"]?v\*['"]?\s*$/m.test(deployWorkflow)
+  ) {
+    errors.push('release-trigger-missing');
+  }
+}
+
+/**
  * @param {{ cwd?: string }} [input]
  * @returns {Promise<{ errors: string[], warnings: string[] }>}
  */
@@ -267,6 +381,7 @@ export async function inspectRepository({ cwd = process.cwd() } = {}) {
   }
 
   inspectProductionPaths(cwd, files, errors);
+  inspectDeploymentConfiguration(cwd, errors);
 
   return {
     errors: [...new Set(errors)],

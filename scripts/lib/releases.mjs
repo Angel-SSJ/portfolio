@@ -187,6 +187,27 @@ function readRepoSlug(cwd) {
 }
 
 /**
+ * @param {string} output
+ * @param {string} sha
+ * @returns {CiFacts}
+ */
+export function parseQualityConclusions(output, sha) {
+  const runs = output
+    .split('\n')
+    .filter(Boolean)
+    .map((line) => {
+      const [id, conclusion] = line.split('\t');
+
+      return { id: Number(id), conclusion: (conclusion ?? '').trim() };
+    })
+    .filter((run) => Number.isSafeInteger(run.id))
+    .sort((left, right) => right.id - left.id);
+  const success = runs[0]?.conclusion === 'success';
+
+  return { status: success ? 'success' : 'failure', sha: success ? sha : null };
+}
+
+/**
  * @param {string} cwd
  * @param {string} sha
  * @returns {CiFacts}
@@ -195,28 +216,15 @@ function readCi(cwd, sha) {
   const output = execFileSync(
     'gh',
     [
-      'run',
-      'list',
-      '--repo',
-      readRepoSlug(cwd),
-      '--commit',
-      sha,
-      '--status',
-      'success',
-      '--limit',
-      '1',
-      '--json',
-      'conclusion,headSha',
+      'api',
+      `repos/${readRepoSlug(cwd)}/commits/${sha}/check-runs`,
+      '--paginate',
+      '--jq',
+      '.check_runs[] | select(.name == "quality") | [.id, .conclusion] | @tsv',
     ],
     { cwd, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] },
   );
-  const runs = JSON.parse(output);
-  const run = runs[0];
-
-  return {
-    status: run?.conclusion === 'success' ? 'success' : 'failure',
-    sha: run?.headSha ?? null,
-  };
+  return parseQualityConclusions(output, sha);
 }
 
 /**

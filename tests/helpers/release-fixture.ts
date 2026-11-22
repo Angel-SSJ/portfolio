@@ -31,6 +31,25 @@ export type ReleaseFixture = {
   cleanup: () => void;
 };
 
+function releaseEnv(env: Record<string, string> = {}): NodeJS.ProcessEnv {
+  const localPnpmBins = [
+    path.join(ROOT, '.tools', 'pnpm', 'node_modules', '.bin'),
+    path.join(ROOT, '.tools', 'pnpm', 'node_modules', 'pnpm', 'bin'),
+  ];
+  const pathKey =
+    Object.keys(process.env).find((key) => key.toLowerCase() === 'path') ??
+    'PATH';
+  const currentPath = process.env[pathKey] ?? '';
+
+  return {
+    ...process.env,
+    [pathKey]: [...localPnpmBins, currentPath]
+      .filter(Boolean)
+      .join(path.delimiter),
+    ...env,
+  };
+}
+
 function run(
   command: string,
   args: string[],
@@ -40,7 +59,7 @@ function run(
   return execFileSync(command, args, {
     cwd,
     encoding: 'utf8',
-    env: { ...process.env, ...env },
+    env: releaseEnv(env),
     stdio: ['ignore', 'pipe', 'pipe'],
   }).trim();
 }
