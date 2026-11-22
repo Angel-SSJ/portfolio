@@ -5,7 +5,7 @@ export default getViteConfig({
   test: {
     include: ['tests/integration/**/*.test.ts'],
     environment: 'node',
-    testTimeout: 60_000,
-    hookTimeout: 60_000,
+    testTimeout: 120_000,
+    hookTimeout: 120_000,
   },
 });

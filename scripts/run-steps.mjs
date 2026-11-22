@@ -13,6 +13,7 @@ export const VERIFY_STEPS = [
   { label: 'lint', argv: ['pnpm', 'lint'] },
   { label: 'types', argv: ['pnpm', 'typecheck'] },
   { label: 'repository', argv: ['pnpm', 'check:repo'] },
+  { label: 'workflows', argv: ['pnpm', 'check:workflows'] },
   { label: 'unit', argv: ['pnpm', 'test:unit'] },
   { label: 'integration', argv: ['pnpm', 'test:integration'] },
 ];

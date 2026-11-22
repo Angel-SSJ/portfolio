@@ -18,6 +18,7 @@
     "hooks:install": "node scripts/install-hooks.mjs",
     "hooks:check": "node scripts/check-hooks.mjs",
     "check:repo": "node scripts/check-repository.mjs",
+    "check:workflows": "node scripts/check-workflows.mjs",
     "doctor": "node scripts/doctor.mjs",
     "health": "node scripts/run-steps.mjs health",
     "verify": "node scripts/run-steps.mjs verify",
@@ -51,6 +52,7 @@
     "@types/node": "26.6.6",
     "@types/semver": "7.8.0",
     "@typescript-eslint/parser": "8.73.0",
+    "actionlint": "2.0.6",
     "eslint": "10.15.0",
     "eslint-plugin-astro": "3.2.1",
     "eslint-plugin-jsx-a11y-x": "0.2.0",
@@ -61,6 +63,7 @@
     "semver": "7.8.6",
     "typescript": "6.0.3",
     "typescript-eslint": "8.73.0",
+    "vercel": "66.6.0",
     "vitest": "5.1.1"
   }
 }
