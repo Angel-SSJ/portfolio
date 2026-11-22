@@ -1,0 +1,305 @@
+name: Deploy
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: read
+  checks: read
+
+concurrency:
+  group: portfolio-production
+  cancel-in-progress: false
+
+jobs:
+  validate:
+    name: validate
+    runs-on: ubuntu-latest
+    outputs:
+      tag: ${{ steps.tag.outputs.tag }}
+      sha: ${{ steps.tag.outputs.sha }}
+      version: ${{ steps.tag.outputs.version }}
+      preflight: ${{ steps.preflight.outputs.action }}
+    steps:
+      - name: Check out pushed tag
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.ref }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Validate stable tag and resolve exact commit
+        id: tag
+        shell: bash
+        run: |
+          set -euo pipefail
+          tag="${GITHUB_REF_NAME}"
+
+          if ! [[ "$tag" =~ ^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]]; then
+            echo "Tag must be strict stable SemVer." >&2
+            exit 1
+          fi
+
+          sha="$(git rev-parse "${GITHUB_REF}^{commit}")"
+
+          if ! [[ "$sha" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "Tag did not resolve to a commit SHA." >&2
+            exit 1
+          fi
+
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          echo "sha=$sha" >> "$GITHUB_OUTPUT"
+          echo "version=${tag#v}" >> "$GITHUB_OUTPUT"
+
+      - name: Install Node
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .node-version
+
+      - name: Check out exact validated commit
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ steps.tag.outputs.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Install pnpm and dependencies
+        shell: bash
+        run: |
+          set -euo pipefail
+          corepack enable
+          corepack prepare pnpm@12.21.0 --activate
+          pnpm install --frozen-lockfile
+
+      - name: Validate Vercel project identity
+        shell: bash
+        env:
+          VERCEL_PROJECT_ID: ${{ vars.VERCEL_PROJECT_ID }}
+          VERCEL_ORG_ID: ${{ vars.VERCEL_ORG_ID }}
+        run: |
+          set -euo pipefail
+          if [ -z "${VERCEL_PROJECT_ID:-}" ] || [ -z "${VERCEL_ORG_ID:-}" ]; then
+            echo "Vercel project identity is not configured." >&2
+            exit 1
+          fi
+
+      - name: Validate tag, history, main membership and quality status
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ steps.tag.outputs.tag }}
+          SHA: ${{ steps.tag.outputs.sha }}
+        run: |
+          set -euo pipefail
+          git config --local user.name "Angel Ramirez"
+          git config --local user.email "angelgabriel.16ra@gmail.com"
+          git config --file "$RUNNER_TEMP/git-config" credential.helper '!gh auth git-credential'
+          export GIT_CONFIG_GLOBAL="$RUNNER_TEMP/git-config"
+          git fetch origin "refs/tags/$TAG:refs/tags/$TAG"
+          node scripts/verify-release.mjs --tag "$TAG"
+          pnpm check:commits --base ROOT --head "$SHA"
+          pnpm verify
+
+      - name: Promotion preflight
+        id: preflight
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          VERCEL_PROJECT_ID: ${{ vars.VERCEL_PROJECT_ID }}
+          VERCEL_ORG_ID: ${{ vars.VERCEL_ORG_ID }}
+          EXPECTED_SHA: ${{ steps.tag.outputs.sha }}
+          CANDIDATE_SHA: ${{ steps.tag.outputs.sha }}
+        run: |
+          set -euo pipefail
+          decision="$(node scripts/check-promotion.mjs --phase preflight)"
+          echo "$decision"
+          action="$(printf '%s' "$decision" | jq -r '.action')"
+
+          if [ "$action" = "reject" ] || [ "$action" = "" ]; then
+            echo "Promotion preflight rejected this tag." >&2
+            exit 1
+          fi
+
+          echo "action=$action" >> "$GITHUB_OUTPUT"
+
+  deploy:
+    name: deploy
+    needs: validate
+    if: needs.validate.outputs.preflight == 'stage'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      checks: read
+    environment:
+      name: production
+    outputs:
+      stagedUrl: ${{ steps.stage.outputs.url }}
+      promotion: ${{ steps.promote.outputs.action }}
+    steps:
+      - name: Check out exact validated commit
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ needs.validate.outputs.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Install Node
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .node-version
+
+      - name: Install pnpm and dependencies
+        shell: bash
+        run: |
+          set -euo pipefail
+          corepack enable
+          corepack prepare pnpm@12.21.0 --activate
+          pnpm install --frozen-lockfile
+
+      - name: Install Playwright browsers
+        shell: bash
+        run: pnpm exec playwright install --with-deps chromium firefox webkit
+
+      - name: Validate Vercel project identity
+        shell: bash
+        env:
+          VERCEL_PROJECT_ID: ${{ vars.VERCEL_PROJECT_ID }}
+          VERCEL_ORG_ID: ${{ vars.VERCEL_ORG_ID }}
+        run: |
+          set -euo pipefail
+          if [ -z "${VERCEL_PROJECT_ID:-}" ] || [ -z "${VERCEL_ORG_ID:-}" ]; then
+            echo "Vercel project identity is not configured." >&2
+            exit 1
+          fi
+
+      - name: Pull production configuration
+        shell: bash
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          VERCEL_PROJECT_ID: ${{ vars.VERCEL_PROJECT_ID }}
+          VERCEL_ORG_ID: ${{ vars.VERCEL_ORG_ID }}
+        run: pnpm exec vercel pull --yes --environment=production
+
+      - name: Build production output
+        shell: bash
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          VERCEL_PROJECT_ID: ${{ vars.VERCEL_PROJECT_ID }}
+          VERCEL_ORG_ID: ${{ vars.VERCEL_ORG_ID }}
+        run: pnpm exec vercel build --prod
+
+      - name: Stage prebuilt production output
+        id: stage
+        shell: bash
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          VERCEL_PROJECT_ID: ${{ vars.VERCEL_PROJECT_ID }}
+          VERCEL_ORG_ID: ${{ vars.VERCEL_ORG_ID }}
+          VERSION: ${{ needs.validate.outputs.version }}
+          SHA: ${{ needs.validate.outputs.sha }}
+        run: |
+          set -euo pipefail
+          url="$(pnpm exec vercel deploy --prebuilt --prod --skip-domain \
+            --meta "portfolioVersion=$VERSION" \
+            --meta "portfolioSha=$SHA")"
+
+          node -e '
+            const url = new URL(process.argv[1]);
+            if (url.protocol !== "https:" || url.username || url.password) process.exit(1);
+          ' "$url"
+
+          STAGED_URL="$url" node scripts/verify-staged-deployment.mjs
+
+          echo "url=$url" >> "$GITHUB_OUTPUT"
+
+      - name: Smoke test staged production bytes
+        shell: bash
+        env:
+          BASE_URL: ${{ steps.stage.outputs.url }}
+          VERCEL_AUTOMATION_BYPASS_SECRET: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}
+        run: |
+          set -euo pipefail
+          host="$(node -e 'process.stdout.write(new URL(process.argv[1]).hostname)' "$BASE_URL")"
+          export PORTFOLIO_DEPLOY_HOST="$host"
+          bypass_args=()
+
+          if [ -n "${VERCEL_AUTOMATION_BYPASS_SECRET:-}" ]; then
+            bypass_args=(-H "x-vercel-protection-bypass: $VERCEL_AUTOMATION_BYPASS_SECRET")
+          fi
+
+          root_status="$(curl -sS -o /dev/null -w '%{http_code}' "${bypass_args[@]}" "$BASE_URL/")"
+          not_found_status="$(curl -sS -o /dev/null -w '%{http_code}' "${bypass_args[@]}" "$BASE_URL/404" || true)"
+
+          if [ "$root_status" != "200" ] || [ "$not_found_status" != "404" ]; then
+            echo "Route smoke checks failed: $root_status $not_found_status" >&2
+            exit 1
+          fi
+
+          PORTFOLIO_STAGED_SMOKE=1 pnpm test:e2e
+
+      - name: Promote exact staged deployment
+        id: promote
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          VERCEL_PROJECT_ID: ${{ vars.VERCEL_PROJECT_ID }}
+          VERCEL_ORG_ID: ${{ vars.VERCEL_ORG_ID }}
+          EXPECTED_SHA: ${{ needs.validate.outputs.sha }}
+          CANDIDATE_SHA: ${{ needs.validate.outputs.sha }}
+          SMOKE_SUCCEEDED: "true"
+          STAGED_URL: ${{ steps.stage.outputs.url }}
+          EXCLUDED_DEPLOYMENT_URL: ${{ steps.stage.outputs.url }}
+        run: |
+          set -euo pipefail
+          decision="$(node scripts/check-promotion.mjs --phase promotion)"
+          echo "$decision"
+          action="$(printf '%s' "$decision" | jq -r '.action')"
+
+          if [ "$action" = "reject" ] || [ "$action" = "" ]; then
+            echo "Promotion guard rejected this deployment." >&2
+            exit 1
+          fi
+
+          if [ "$action" = "promote" ]; then
+            pnpm exec vercel promote "$STAGED_URL" --yes
+          fi
+
+          echo "action=$action" >> "$GITHUB_OUTPUT"
+
+  record:
+    name: record
+    needs: [validate, deploy]
+    if: needs.validate.result == 'success' && (needs.validate.outputs.preflight == 'already-current' || needs.deploy.result == 'success')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Check out exact validated commit
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ needs.validate.outputs.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Record GitHub Release from the existing tag
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ needs.validate.outputs.tag }}
+          SHA: ${{ needs.validate.outputs.sha }}
+        run: |
+          set -euo pipefail
+
+          if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "Release $TAG is already recorded."
+          else
+            gh release create "$TAG" \
+              --repo "$GITHUB_REPOSITORY" \
+              --target "$SHA" \
+              --title "$TAG" \
+              --generate-notes \
+              --verify-tag
+          fi

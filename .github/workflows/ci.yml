@@ -1,0 +1,103 @@
+name: CI
+
+on:
+  push:
+    branches: ["**"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  quality:
+    name: quality
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out pushed head
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Install Node
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .node-version
+
+      - name: Resolve commit range
+        id: range
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            head="$(git rev-parse HEAD)"
+            echo "base=ROOT" >> "$GITHUB_OUTPUT"
+            echo "head=$head" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          if [ "${{ github.event.deleted }}" = "true" ]; then
+            echo "Branch deletion has no head to validate." >&2
+            exit 1
+          fi
+
+          head="${{ github.event.after }}"
+
+          if ! git cat-file -e "$head^{commit}" 2>/dev/null; then
+            git fetch --no-tags origin "$head"
+          fi
+
+          if [ "${{ github.ref }}" = "refs/heads/main" ]; then
+            before="${{ github.event.before }}"
+
+            if [ -n "$before" ] && [ "$before" != "0000000000000000000000000000000000000000" ]; then
+              if ! git cat-file -e "$before^{commit}" 2>/dev/null; then
+                git fetch --no-tags origin "$before"
+              fi
+              base="$before"
+            else
+              base="ROOT"
+            fi
+          else
+            git fetch --no-tags origin main
+            base="origin/main"
+          fi
+
+          git cat-file -e "$head^{commit}"
+          echo "base=$base" >> "$GITHUB_OUTPUT"
+          echo "head=$head" >> "$GITHUB_OUTPUT"
+
+      - name: Install pnpm and dependencies
+        shell: bash
+        run: |
+          set -euo pipefail
+          corepack enable
+          corepack prepare pnpm@12.21.0 --activate
+          pnpm install --frozen-lockfile
+
+      - name: Install browsers
+        shell: bash
+        run: pnpm exec playwright install --with-deps chromium firefox webkit
+
+      - name: Run health gate
+        shell: bash
+        run: pnpm health
+
+      - name: Validate commit identities and messages
+        shell: bash
+        env:
+          BASE: ${{ steps.range.outputs.base }}
+          HEAD: ${{ steps.range.outputs.head }}
+        run: pnpm check:commits --base "$BASE" --head "$HEAD"
+
+      - name: Upload failure artifacts
+        if: failure()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: ci-failure-${{ github.sha }}
+          path: |
+            test-results/**
+            playwright-report/**
+          retention-days: 7
+          if-no-files-found: ignore
