@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   createReleaseServices,
+  parseQualityConclusions,
   validateTag,
 } from '../../scripts/lib/releases.mjs';
 import { verifyRelease } from '../../scripts/verify-release.mjs';
@@ -226,6 +227,32 @@ describe('verifyRelease', () => {
     });
 
     expect(result.errors).toContain('tagger-mismatch');
+  });
+});
+
+describe('parseQualityConclusions', () => {
+  const sha = '1111111111111111111111111111111111111111';
+
+  it('accepts an exact SHA whose latest quality check succeeded', () => {
+    expect(parseQualityConclusions('1\tsuccess\n2\tsuccess\n', sha)).toEqual({
+      status: 'success',
+      sha,
+    });
+    expect(parseQualityConclusions('1\tfailure\n2\tsuccess\n', sha)).toEqual({
+      status: 'success',
+      sha,
+    });
+  });
+
+  it('rejects missing or failed quality checks', () => {
+    expect(parseQualityConclusions('', sha)).toEqual({
+      status: 'failure',
+      sha: null,
+    });
+    expect(parseQualityConclusions('1\tsuccess\n2\tfailure\n', sha)).toEqual({
+      status: 'failure',
+      sha: null,
+    });
   });
 });
 

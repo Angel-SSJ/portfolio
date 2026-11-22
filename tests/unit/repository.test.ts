@@ -48,6 +48,43 @@ const sourceFiles: Record<string, string> = {
   ),
 };
 
+const validVercelConfig = {
+  framework: 'astro',
+  installCommand: 'pnpm install --frozen-lockfile',
+  buildCommand: 'pnpm build',
+  outputDirectory: 'dist',
+  git: { deploymentEnabled: false },
+};
+
+const validDeployWorkflow = `name: Deploy
+on:
+  push:
+    tags: ['v*']
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Promote
+        env:
+          VERCEL_TOKEN: \${{ secrets.VERCEL_TOKEN }}
+        run: pnpm exec vercel promote
+`;
+
+function deploymentFiles(
+  vercelConfig: Record<string, unknown> = validVercelConfig,
+  workflows: Record<string, string> = { 'deploy.yml': validDeployWorkflow },
+): Record<string, string> {
+  return {
+    'vercel.json': JSON.stringify(vercelConfig, null, 2),
+    ...Object.fromEntries(
+      Object.entries(workflows).map(([name, contents]) => [
+        `.github/workflows/${name}`,
+        contents,
+      ]),
+    ),
+  };
+}
+
 const fixtures: string[] = [];
 
 function createFixture(options: FixtureOptions = {}) {
@@ -178,5 +215,96 @@ describe('repository invariants', () => {
     const result = await inspectRepository({ cwd });
 
     expect(result.errors).toContain('git-inspection-failed');
+  });
+
+  it('rejects enabled Vercel Git deployments', async () => {
+    const cwd = createFixture({
+      files: deploymentFiles({
+        ...validVercelConfig,
+        git: { deploymentEnabled: true },
+      }),
+    });
+
+    const result = await inspectRepository({ cwd });
+
+    expect(result.errors).toContain('vercel-git-deploy-enabled');
+  });
+
+  it('rejects an ordinary main-branch production trigger', async () => {
+    const cwd = createFixture({
+      files: deploymentFiles(validVercelConfig, {
+        'deploy.yml': validDeployWorkflow.replace(
+          "tags: ['v*']",
+          "branches: ['main']",
+        ),
+      }),
+    });
+
+    const result = await inspectRepository({ cwd });
+
+    expect(result.errors).toContain('main-deployment-trigger');
+  });
+
+  it('rejects a second release or tag trigger workflow', async () => {
+    const cwd = createFixture({
+      files: deploymentFiles(validVercelConfig, {
+        'deploy.yml': validDeployWorkflow,
+        'ci.yml': `name: CI
+on:
+  push:
+    tags: ['v*']
+jobs:
+  quality:
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo quality
+`,
+      }),
+    });
+
+    const result = await inspectRepository({ cwd });
+
+    expect(result.errors).toContain('duplicate-release-trigger');
+  });
+
+  it('rejects a wildcard SPA rewrite', async () => {
+    const cwd = createFixture({
+      files: deploymentFiles({
+        ...validVercelConfig,
+        rewrites: [{ source: '/(.*)', destination: '/index.html' }],
+      }),
+    });
+
+    const result = await inspectRepository({ cwd });
+
+    expect(result.errors).toContain('spa-rewrite-forbidden');
+  });
+
+  it('rejects Vercel settings that do not match the package commands', async () => {
+    const cwd = createFixture({
+      files: deploymentFiles({
+        ...validVercelConfig,
+        buildCommand: 'npm run build',
+        installCommand: 'npm install',
+      }),
+    });
+
+    const result = await inspectRepository({ cwd });
+
+    expect(result.errors).toContain('vercel-build-settings-invalid');
+  });
+
+  it('rejects missing pinned workflow tools', async () => {
+    const cwd = createFixture({
+      package(pkg) {
+        delete pkg.devDependencies?.vercel;
+        delete pkg.devDependencies?.actionlint;
+      },
+      files: deploymentFiles(),
+    });
+
+    const result = await inspectRepository({ cwd });
+
+    expect(result.errors).toContain('dependency-pins-required');
   });
 });

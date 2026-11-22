@@ -6,6 +6,13 @@ import {
 } from '../../scripts/run-steps.mjs';
 
 describe('health orchestration', () => {
+  it('validates workflows before the test gates', () => {
+    const labels = VERIFY_STEPS.map((step) => step.label);
+
+    expect(labels).toContain('workflows');
+    expect(labels.indexOf('workflows')).toBeLessThan(labels.indexOf('unit'));
+  });
+
   it('stops and returns nonzero when a required subprocess fails', async () => {
     const attempted: string[] = [];
     const status = await runSteps({

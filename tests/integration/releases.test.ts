@@ -43,9 +43,13 @@ function pushAheadCommit(fixture: ReleaseFixture): string {
       stdio: ['ignore', 'pipe', 'pipe'],
     }).trim();
 
-  execFileSync('git', ['clone', '--quiet', fixture.origin, clone], {
-    stdio: ['ignore', 'pipe', 'pipe'],
-  });
+  execFileSync(
+    'git',
+    ['clone', '--quiet', '--branch', 'main', fixture.origin, clone],
+    {
+      stdio: ['ignore', 'pipe', 'pipe'],
+    },
+  );
   run(['config', 'user.name', 'Angel Ramirez']);
   run(['config', 'user.email', 'angelgabriel.16ra@gmail.com']);
   run(['config', 'commit.gpgsign', 'false']);

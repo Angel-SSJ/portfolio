@@ -80,7 +80,11 @@ export function createReleaseFixture(version = '0.0.0'): ReleaseFixture {
   const origin = path.join(base, 'origin.git');
 
   fs.mkdirSync(cwd);
-  run('git', ['init', '--bare', '--quiet', origin], base);
+  run(
+    'git',
+    ['init', '--bare', '--initial-branch=main', '--quiet', origin],
+    base,
+  );
   run('git', ['init', '--initial-branch=main', '--quiet'], cwd);
 
   const git = (args: string[], env: Record<string, string> = {}): string =>
