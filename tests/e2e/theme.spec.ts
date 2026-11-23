@@ -88,11 +88,29 @@ test.describe('theme state', () => {
     await select.selectOption('light');
     await expectDarkClass(page, false);
     await expectStoredTheme(page, 'light');
+    await page.evaluate(async () => {
+      await document.getAnimations().reduce<Promise<void>>(
+        (promise, animation) =>
+          promise.then(async () => {
+            await animation.finished.catch(() => undefined);
+          }),
+        Promise.resolve(),
+      );
+    });
     await expectNoAxeViolations(page);
 
     await select.selectOption('dark');
     await expectDarkClass(page, true);
     await expectStoredTheme(page, 'dark');
+    await page.evaluate(async () => {
+      await document.getAnimations().reduce<Promise<void>>(
+        (promise, animation) =>
+          promise.then(async () => {
+            await animation.finished.catch(() => undefined);
+          }),
+        Promise.resolve(),
+      );
+    });
     await expectNoAxeViolations(page);
 
     await page.reload();
